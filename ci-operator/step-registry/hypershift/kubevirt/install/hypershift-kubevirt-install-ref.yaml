@@ -3,6 +3,13 @@ ref:
   from: upi-installer
   cli: latest
   grace_period: 10m
+  # Budget for the waits this step serialises: the post pull-secret MCP wait
+  # (20m), the CSV install loop (up to 30m), the HyperConverged Available wait
+  # (15m) and the management node convergence barrier (MGMT_CONVERGENCE_TIMEOUT,
+  # 45m by default). Without a timeout larger than their sum the step can be cut
+  # short before wait_for_management_nodes prints its diagnostics, which is the
+  # bare timeout this barrier exists to replace.
+  timeout: 2h30m0s
   env:
   - name: CNV_SUBSCRIPTION_SOURCE
     default: "cnv-prerelease-catalog-source"
@@ -14,6 +21,37 @@ ref:
     default: '|7820aea2-0d75-11e7-9259-28d244ea5a6d.hhav.f63e13'
   - name: BREW_IMAGE_REGISTRY_TOKEN_PATH
     default: /var/run/cnv-ci-brew-pull-secret/token
+  - name: MGMT_CONVERGENCE_TIMEOUT
+    default: "2700"
+    documentation: |
+      Seconds to wait for the management cluster's nodes to finish the MachineConfig
+      rollout that CNV's virt-platform-autopilot triggers (kernel arguments and swap).
+      The step fails with MachineConfigPool and node diagnostics if they do not
+      converge in time, rather than handing a rebooting cluster to the tests.
+  - name: MGMT_CONVERGENCE_QUIET_PERIOD
+    default: "180"
+    documentation: |
+      Seconds the management nodes must stay converged before the step accepts them.
+      Guards against reading a stale Updated=True from a pool whose autopilot
+      MachineConfigs the MCO has not rendered yet. Must be smaller than
+      MGMT_CONVERGENCE_TIMEOUT.
+  - name: MGMT_AUTOPILOT_MC_PATTERN
+    default: "psi-karg|swap-online"
+    documentation: |
+      Regular expression matching the names of the MachineConfigs that CNV's
+      virt-platform-autopilot creates. Once such a MachineConfig exists, every
+      MachineConfigPool it targets must list it in status.configuration.source
+      before the step treats that pool as converged, so a pool cannot pass the
+      barrier on a rendered config that predates the autopilot's.
+  - name: MGMT_AUTOPILOT_MC_WAIT
+    default: "300"
+    documentation: |
+      Seconds to give virt-platform-autopilot to create its MachineConfigs before
+      the step is willing to accept a cluster on which none have appeared. Bounds
+      how late a rollout can start and still be caught. Runs concurrently with
+      MGMT_CONVERGENCE_QUIET_PERIOD, so a CNV version that installs no such
+      MachineConfigs costs the longer of the two, not their sum. Must be smaller
+      than MGMT_CONVERGENCE_TIMEOUT.
   commands: hypershift-kubevirt-install-commands.sh
   resources:
     requests:
