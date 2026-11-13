@@ -38,9 +38,9 @@ ref:
   - name: MGMT_AUTOPILOT_MC_PATTERN
     default: "psi-karg|swap-online"
     documentation: |
-      Regular expression matching the names of the MachineConfigs that CNV's
+      Python regular expression matching the names of the MachineConfigs that CNV's
       virt-platform-autopilot creates. Once such a MachineConfig exists, every
-      MachineConfigPool it targets must list it in status.configuration.source
+      MachineConfigPool selecting its labels must list it in status.configuration.source
       before the step treats that pool as converged, so a pool cannot pass the
       barrier on a rendered config that predates the autopilot's.
   - name: MGMT_AUTOPILOT_MC_WAIT
