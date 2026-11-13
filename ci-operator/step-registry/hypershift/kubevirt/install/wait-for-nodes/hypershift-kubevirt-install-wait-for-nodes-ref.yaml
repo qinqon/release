@@ -1,0 +1,40 @@
+ref:
+  as: hypershift-kubevirt-install-wait-for-nodes
+  from: upi-installer
+  cli: latest
+  run_as_script: true
+  grace_period: 10m
+  timeout: 1h0m0s
+  env:
+  - name: MGMT_CONVERGENCE_TIMEOUT
+    default: "2700"
+    documentation: |
+      Seconds to wait for the management cluster's nodes to finish the MachineConfig
+      rollout that CNV's virt-platform-autopilot triggers. The step fails with
+      MachineConfigPool and node diagnostics if they do not settle in time.
+  - name: MGMT_CONVERGENCE_QUIET_PERIOD
+    default: "180"
+    documentation: |
+      Seconds the management nodes must stay settled before the step accepts them,
+      so that a rollout starting slightly later is still caught.
+  - name: MGMT_AUTOPILOT_MC_PATTERN
+    default: "psi-karg|swap-online"
+    documentation: |
+      Python regular expression matching the names of the MachineConfigs that
+      virt-platform-autopilot creates. Every MachineConfigPool selecting one of
+      them must have applied it before the pool counts as settled.
+  - name: MGMT_AUTOPILOT_MC_WAIT
+    default: "300"
+    documentation: |
+      Seconds to give virt-platform-autopilot to create its MachineConfigs before
+      the step accepts a cluster on which none have appeared. Runs concurrently
+      with MGMT_CONVERGENCE_QUIET_PERIOD.
+  commands: hypershift-kubevirt-install-wait-for-nodes-commands.py
+  resources:
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  documentation: |-
+    Waits for the management cluster's nodes to finish the MachineConfig rollout
+    triggered by installing the kubevirt operator, so that the following steps
+    do not start on nodes that are about to reboot.

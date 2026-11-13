@@ -22,6 +22,7 @@ workflow:
     - chain: ipi-aws-ovn-pre
     - chain: ipi-install
     - ref: hypershift-kubevirt-install
+    - ref: hypershift-kubevirt-install-wait-for-nodes
     - ref: hypershift-kubevirt-install-odf
     - ref: hypershift-install
     - ref: hypershift-kubevirt-create

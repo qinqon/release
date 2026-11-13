@@ -19,6 +19,7 @@ workflow:
       - ref: ipi-install-rbac
       - chain: hypershift-setup-nested-management-cluster
       - ref: hypershift-kubevirt-install
+      - ref: hypershift-kubevirt-install-wait-for-nodes
       - ref: hypershift-install
     test:
       - chain: hypershift-kubevirt-run-e2e-local
