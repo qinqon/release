@@ -3,6 +3,9 @@ ref:
   from: upi-installer
   cli: latest
   grace_period: 10m
+  # Covers the waits of this step: pull secret rollout (20m), CSV (30m),
+  # HyperConverged (15m) and MGMT_CONVERGENCE_TIMEOUT (45m).
+  timeout: 2h30m0s
   env:
   - name: CNV_SUBSCRIPTION_SOURCE
     default: "cnv-prerelease-catalog-source"
@@ -14,6 +17,22 @@ ref:
     default: '|7820aea2-0d75-11e7-9259-28d244ea5a6d.hhav.f63e13'
   - name: BREW_IMAGE_REGISTRY_TOKEN_PATH
     default: /var/run/cnv-ci-brew-pull-secret/token
+  - name: MGMT_CONVERGENCE_TIMEOUT
+    default: "2700"
+    documentation: |
+      Seconds to wait for the management cluster's nodes to finish the MachineConfig
+      rollout that CNV's virt-platform-autopilot triggers (kernel arguments and swap).
+  - name: MGMT_CONVERGENCE_QUIET_PERIOD
+    default: "300"
+    documentation: |
+      Seconds the management nodes must stay settled before the step accepts them,
+      so that a rollout starting slightly later is still caught.
+  - name: MGMT_AUTOPILOT_MC_PATTERN
+    default: "psi-karg|swap-online"
+    documentation: |
+      Extended regular expression matching the names of the MachineConfigs that
+      virt-platform-autopilot creates. The MachineConfigPool of their role must
+      have applied them before the management nodes count as settled.
   commands: hypershift-kubevirt-install-commands.sh
   resources:
     requests:

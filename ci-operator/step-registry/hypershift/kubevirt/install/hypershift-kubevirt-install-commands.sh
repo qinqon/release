@@ -28,6 +28,63 @@ function add_pullsecret() {
   rm /tmp/.dockerconfigjson /tmp/.dockerconfigjson.new
 }
 
+# A pool keeps reporting Updated=True for its previous configuration until the
+# MCO renders new MachineConfigs, so first check that the ones created by CNV's
+# virt-platform-autopilot have reached the pool of their role.
+function autopilot_configs_applied() {
+  local configs config role applied
+  configs="$(oc get machineconfig -o name)" || return 1
+  for config in $(grep -E "${MGMT_AUTOPILOT_MC_PATTERN}" <<<"${configs}"); do
+    role="$(oc get "${config}" -o jsonpath='{.metadata.labels.machineconfiguration\.openshift\.io/role}')" || return 1
+    applied="$(oc get mcp "${role}" -o jsonpath='{.status.configuration.source[*].name}')" || return 1
+    if ! tr ' ' '\n' <<<"${applied}" | grep -qx "${config##*/}"; then
+      echo "MachineConfigPool ${role} has not applied ${config##*/} yet"
+      return 1
+    fi
+  done
+}
+
+# $1 is how long to wait for the pools to finish updating.
+function management_nodes_settled() {
+  autopilot_configs_applied &&
+    oc wait mcp --all --for=condition=Updated=True --timeout="$1" >/dev/null &&
+    oc wait mcp --all --for=condition=Updating=False --timeout=0s >/dev/null &&
+    oc wait mcp --all --for=condition=Degraded=False --timeout=0s >/dev/null &&
+    oc wait node --all --for=condition=Ready --timeout=0s >/dev/null
+}
+
+# The MachineConfigs created by virt-platform-autopilot (psi kernel argument,
+# swap) make the MCO reboot every node of their pools, and HyperConverged
+# Available says nothing about that rollout. Wait for it to finish and for the
+# nodes to stay settled for a quiet period, so a rollout starting late is caught.
+function wait_for_management_nodes() {
+  local deadline=$(( SECONDS + MGMT_CONVERGENCE_TIMEOUT ))
+  local stable_since="" timeout
+  while (( SECONDS < deadline )); do
+    # Block until the rollout is over, then only sample during the quiet period
+    # so that anything going unhealthy restarts it.
+    timeout="$(( deadline - SECONDS ))s"
+    if [[ -n "${stable_since}" ]]; then
+      timeout=0s
+    fi
+    if management_nodes_settled "${timeout}"; then
+      stable_since="${stable_since:-${SECONDS}}"
+      if (( SECONDS - stable_since >= MGMT_CONVERGENCE_QUIET_PERIOD )); then
+        echo "Management nodes stayed settled for ${MGMT_CONVERGENCE_QUIET_PERIOD}s"
+        return 0
+      fi
+    else
+      stable_since=""
+    fi
+    sleep 15
+  done
+  echo "Error: management nodes did not settle within ${MGMT_CONVERGENCE_TIMEOUT}s"
+  oc get mcp -o wide || true
+  oc get nodes -o wide || true
+  oc get machineconfig || true
+  return 1
+}
+
 
 # Get yq tool
 YQ="/tmp/yq"
@@ -201,6 +258,12 @@ spec:
 EOF
 
 oc wait hyperconverged -n openshift-cnv kubevirt-hyperconverged --for=condition=Available --timeout=15m
+
+# A hosted management cluster has no MachineConfigPools to wait for
+if [[ ${CONTROL_PLANE_TOPOLOGY} != "External" ]]
+then
+  wait_for_management_nodes
+fi
 
 # CDI auto-detects only volumeMode=Block for gp3-csi in its StorageProfile.
 # KubeVirt DataVolumes created by HyperShift request volumeMode=Filesystem,
